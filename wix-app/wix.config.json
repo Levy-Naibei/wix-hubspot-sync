@@ -1,0 +1,47 @@
+{
+  "appId": "${WIX_APP_ID}",
+  "appName": "HubSpot Sync",
+  "appDescription": "Bi-directional contact sync and lead capture between Wix and HubSpot.",
+  "appType": "self-hosted",
+  "components": [
+    {
+      "type": "DASHBOARD_PAGE",
+      "name": "HubSpot Integration",
+      "route": "/dashboard",
+      "componentData": {
+        "url": "${FRONTEND_URL}",
+        "iframePermissions": [
+          "allow-popups",
+          "allow-popups-to-escape-sandbox",
+          "allow-forms",
+          "allow-scripts",
+          "allow-same-origin"
+        ]
+      }
+    }
+  ],
+  "permissions": [
+    "WIX_CONTACTS.READ_WRITE",
+    "WIX_FORMS.READ",
+    "WIX_SITE.READ"
+  ],
+  "webhooks": [
+    {
+      "event": "wix.contacts.v4.contact_created",
+      "callbackUrl": "${BACKEND_URL}/api/webhooks/wix"
+    },
+    {
+      "event": "wix.contacts.v4.contact_updated",
+      "callbackUrl": "${BACKEND_URL}/api/webhooks/wix"
+    }
+  ],
+  "oauthScopes": [],
+  "serverlessConfig": {
+    "endpoints": [
+      {
+        "method": "POST",
+        "path": "/api/forms/submit"
+      }
+    ]
+  }
+}
