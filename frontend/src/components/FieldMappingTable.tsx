@@ -14,19 +14,19 @@ const TRANSFORMS = [
   { value: 'uppercase', label: 'Uppercase' },
 ];
 
-const DirectionBadge = ({ direction }: { direction: FieldMapping['direction'] }) => {
-  const d = DIRECTIONS.find((d) => d.value === direction);
-  const colors: Record<string, string> = {
-    wix_to_hubspot: 'bg-blue-50 text-blue-700 border-blue-200',
-    hubspot_to_wix: 'bg-orange-50 text-orange-700 border-orange-200',
-    bidirectional: 'bg-violet-50 text-violet-700 border-violet-200',
-  };
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${colors[direction]}`}>
-      {d?.icon} {d?.label}
-    </span>
-  );
-};
+// const DirectionBadge = ({ direction }: { direction: FieldMapping['direction'] }) => {
+//   const d = DIRECTIONS.find((d) => d.value === direction);
+//   const colors: Record<string, string> = {
+//     wix_to_hubspot: 'bg-blue-50 text-blue-700 border-blue-200',
+//     hubspot_to_wix: 'bg-orange-50 text-orange-700 border-orange-200',
+//     bidirectional: 'bg-violet-50 text-violet-700 border-violet-200',
+//   };
+//   return (
+//     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold border ${colors[direction]}`}>
+//       {d?.icon} {d?.label}
+//     </span>
+//   );
+// };
 
 export function FieldMappingTable({ connected }: { connected: boolean }) {
   const {
