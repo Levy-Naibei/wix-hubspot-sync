@@ -1,19 +1,13 @@
-{  "name": "wix-hubspot-backend",
+{
+  "name": "wix-hubspot-backend",
   "version": 2,
-  "routes": [
+  "builds": [
     {
-      "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "src": "api/**/*.ts",
+      "use": "@vercel/node"
     }
   ],
-  "functions": {
-    "api/index.ts": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 30,
-      "memory": 512
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "routes": [
+    { "src": "/(.*)", "dest": "/api/index.ts" }
+  ]
 }

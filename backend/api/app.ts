@@ -2,15 +2,15 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { config } from './config';
+import { config } from '../src/config';
 // import { connectDb } from '../src/db';
-import { logger } from './utils/logger';
+import { logger } from '../src/utils/logger';
 
-import authRoutes from './routes/auth';
-import fieldMappingRoutes from './routes/fieldMapping';
-import webhookRoutes from './routes/webhooks';
-import formRoutes from './routes/forms';
-import syncRoutes from './routes/sync';
+import authRoutes from '../src/routes/auth';
+import fieldMappingRoutes from '../src/routes/fieldMapping';
+import webhookRoutes from '../src/routes/webhooks';
+import formRoutes from '../src/routes/forms';
+import syncRoutes from '../src/routes/sync';
 
 const app = express();
 
