@@ -17,6 +17,8 @@ export const config = {
   nodeEnv: optional('NODE_ENV', 'development'),
   isProd: optional('NODE_ENV', 'development') === 'production',
 
+  mongoUri: optional('MONGODB_URI', ''),
+
   wix: {
     appId: optional('WIX_APP_ID', 'dev-app-id'),
     appSecret: optional('WIX_APP_SECRET', 'dev-secret'),

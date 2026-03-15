@@ -2,7 +2,7 @@
 
 # Wix ↔ HubSpot Sync
 
- - A production-ready, self-hosted Wix app enabling bi-directional contact sync, form lead capture with UTM attribution, secure OAuth 2.0 token management, and a field-mapping dashboard UI.
+ - A production-ready, responsive, self-hosted Wix app enabling bi-directional contact sync, form lead capture with UTM attribution, secure OAuth 2.0 token management, and a field-mapping dashboard UI.
 
 ## Tech stack
   
@@ -12,6 +12,7 @@
   - Docker
   - Vercel
   - Netlify
+  - MongoDB
 
 ## API Plan
 
@@ -98,3 +99,22 @@ Form submissions store these as HubSpot contact properties:
 | `form_page_url`     | `window.location.href`     |
 | `form_referrer`     | `document.referrer`        |
 | `form_submitted_at` | ISO 8601 timestamp         |
+
+
+## MongoDB Atlas Setup
+
+1. Go to [cloud.mongodb.com](https://cloud.mongodb.com) → Create a free M0 cluster
+2. **Database Access** → Add a database user with read/write permissions
+3. **Network Access** → Add `0.0.0.0/0` (or your server IP) to the IP allowlist
+4. **Connect** → Choose "Connect your application" → copy the connection string
+5. Paste into `.env` as `MONGODB_URI`, replacing `<password>` with your user password
+
+
+### Collections created automatically on first run
+
+|     Collection    |          Purpose                                                         |
+|-------------------|--------------------------------------------------------------------------|
+| `tokens`          | Encrypted HubSpot OAuth tokens per site                                  |
+| `contactmappings` | WixContactId ↔ HubSpotContactId pairs                                    |
+| `fieldmappings`   | User-configured field mapping rules per site                             |
+| `synclogs`        | Audit log of every sync event (auto-expires after 90 days via TTL index) |

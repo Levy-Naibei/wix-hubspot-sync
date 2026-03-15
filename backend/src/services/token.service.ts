@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { getDb } from '../db';
+import { Token } from '../models/token.model';
 import { config } from '../config';
 import { HubSpotTokens } from '../types';
 import { logger } from '../utils/logger';
@@ -12,7 +12,6 @@ function encrypt(plaintext: string): string {
   const cipher = crypto.createCipheriv(ALGORITHM, KEY, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
-  // iv:tag:ciphertext (all base64)
   return [iv.toString('base64'), tag.toString('base64'), encrypted.toString('base64')].join(':');
 }
 
@@ -27,72 +26,47 @@ function decrypt(ciphertext: string): string {
 }
 
 export class TokenService {
-  /** Persist OAuth tokens for a given site. Never stores plaintext. */
   async save(siteId: string, tokens: HubSpotTokens, portalId?: string): Promise<void> {
-    const db = getDb();
-    const stmt = db.prepare(`
-      INSERT INTO tokens
-        (site_id, encrypted_access_token, encrypted_refresh_token, expires_at, scope, token_type, hubspot_portal_id, updated_at)
-      VALUES
-        (@siteId, @accessToken, @refreshToken, @expiresAt, @scope, @tokenType, @portalId, datetime('now'))
-      ON CONFLICT(site_id) DO UPDATE SET
-        encrypted_access_token = excluded.encrypted_access_token,
-        encrypted_refresh_token = excluded.encrypted_refresh_token,
-        expires_at = excluded.expires_at,
-        scope = excluded.scope,
-        token_type = excluded.token_type,
-        hubspot_portal_id = excluded.hubspot_portal_id,
-        updated_at = datetime('now')
-    `);
-    stmt.run({
-      siteId,
-      accessToken: encrypt(tokens.accessToken),
-      refreshToken: encrypt(tokens.refreshToken),
-      expiresAt: tokens.expiresAt,
-      scope: tokens.scope,
-      tokenType: tokens.tokenType,
-      portalId: portalId ?? null,
-    });
+    await Token.findOneAndUpdate(
+      { siteId },
+      {
+        siteId,
+        encryptedAccessToken: encrypt(tokens.accessToken),
+        encryptedRefreshToken: encrypt(tokens.refreshToken),
+        expiresAt: tokens.expiresAt,
+        scope: tokens.scope,
+        tokenType: tokens.tokenType,
+        ...(portalId && { hubspotPortalId: portalId }),
+      },
+      { upsert: true, new: true },
+    );
     logger.info('Tokens saved for site', { siteId });
   }
 
-  /** Retrieve and decrypt tokens. Returns null if not found. */
   async get(siteId: string): Promise<HubSpotTokens | null> {
-    const db = getDb();
-    const row = db
-      .prepare('SELECT * FROM tokens WHERE site_id = ?')
-      .get(siteId) as Record<string, unknown> | undefined;
-
-    if (!row) return null;
-
+    const doc = await Token.findOne({ siteId }).lean();
+    if (!doc) return null;
     return {
-      accessToken: decrypt(row.encrypted_access_token as string),
-      refreshToken: decrypt(row.encrypted_refresh_token as string),
-      expiresAt: row.expires_at as number,
-      scope: row.scope as string,
-      tokenType: row.token_type as string,
+      accessToken: decrypt(doc.encryptedAccessToken),
+      refreshToken: decrypt(doc.encryptedRefreshToken),
+      expiresAt: doc.expiresAt,
+      scope: doc.scope,
+      tokenType: doc.tokenType,
     };
   }
 
   async getPortalId(siteId: string): Promise<string | null> {
-    const db = getDb();
-    const row = db
-      .prepare('SELECT hubspot_portal_id FROM tokens WHERE site_id = ?')
-      .get(siteId) as { hubspot_portal_id: string | null } | undefined;
-    return row?.hubspot_portal_id ?? null;
+    const doc = await Token.findOne({ siteId }, { hubspotPortalId: 1 }).lean();
+    return doc?.hubspotPortalId ?? null;
   }
 
   async isConnected(siteId: string): Promise<boolean> {
-    const db = getDb();
-    const row = db
-      .prepare('SELECT id FROM tokens WHERE site_id = ?')
-      .get(siteId);
-    return row !== undefined;
+    const count = await Token.countDocuments({ siteId });
+    return count > 0;
   }
 
   async delete(siteId: string): Promise<void> {
-    const db = getDb();
-    db.prepare('DELETE FROM tokens WHERE site_id = ?').run(siteId);
+    await Token.deleteOne({ siteId });
     logger.info('Tokens deleted for site', { siteId });
   }
 }

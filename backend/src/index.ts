@@ -3,7 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { config } from './config';
-import { getDb } from './db';
+import { connectDb } from './db';
 import { logger } from './utils/logger';
 
 import authRoutes from './routes/auth';
@@ -14,7 +14,7 @@ import syncRoutes from './routes/sync';
 
 const app = express();
 
-// ─── Security middleware ─────────────────────────────────────────────────────
+// ─── Security middleware ────
 app.use(helmet({
   contentSecurityPolicy: false,
 }));
@@ -46,7 +46,7 @@ app.use((req: Request & { rawBody?: string }, _res: Response, next: NextFunction
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Rate limiting ───────────────────────────────────────────────────────────
+// ─── Rate limiting ───
 const apiLimiter = rateLimit({
   windowMs: 60_000,
   max: 100,
@@ -63,39 +63,39 @@ const formLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 app.use('/api/forms/', formLimiter);
 
-// ─── Routes ──────────────────────────────────────────────────────────────────
+// ─── Routes ────
 app.use('/api/auth', authRoutes);
 app.use('/api/field-mapping', fieldMappingRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/forms', formRoutes);
 app.use('/api/sync', syncRoutes);
 
-// ─── Health check ─────────────────────────────────────────────────────────────
+// ─── Health check ────
 app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ─── Global error handler ────────────────────────────────────────────────────
+// ─── Global error handler ───
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   logger.error('Unhandled error', { message: err.message, stack: err.stack });
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// ─── DB initialization ───────────────────────────────────────────────────────
-try {
-  getDb();
-} catch (err) {
-  logger.error('Database startup failed', { err });
+async function main() {
+  // ─── Initialize DB (works for both local and Vercel) ────
+  await connectDb();
+  
+  // ─── Start local server only when NOT on Vercel ───
+  if (process.env.VERCEL !== "1") {
+    app.listen(config.port, () => {
+      logger.info(`Server running on port ${config.port}`, { env: config.nodeEnv });
+    });
+  }
 }
 
-// ─── Start server only when NOT on Vercel ────────────────────────────────────
-if (!process.env.VERCEL) {
-  app.listen(config.port, () => {
-    logger.info(`Server running on port ${config.port}`, {
-      env: config.nodeEnv,
-      dbPath: config.dbPath,
-    });
-  });
-}
+main().catch((err) => {
+  logger.error('Failed to start server', { err});
+  process.exit(1);
+});
 
 export default app;

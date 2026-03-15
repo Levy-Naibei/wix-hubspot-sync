@@ -1,13 +1,15 @@
 import NodeCache from 'node-cache';
 import { v4 as uuidv4 } from 'uuid';
-import { getDb } from '../db';
+import { ContactMapping } from '../models/contactMapping.model';
+import { FieldMapping, IFieldMapping } from '../models/fieldMapping.model';
+import { SyncLog } from '../models/syncLog.model';
 import { hubspotService } from './hubspot.service';
 import { wixService } from './wix.service';
-import { FieldMapping, SyncResult, WixContact, HubSpotContact } from '../types';
+import { SyncResult, WixContact, HubSpotContact } from '../types';
 import { logger } from '../utils/logger';
 import { config } from '../config';
 
-// ─── Deduplication Cache ─────────────────────────────────────────────────────
+// ─── Deduplication Cache ──────
 // TTL-based in-memory cache to track correlation IDs of our own writes.
 // If a webhook arrives with a correlationId in this cache → it was produced by
 // our own write → skip to prevent ping-pong loops.
@@ -19,20 +21,11 @@ const dedupCache = new NodeCache({
 function markWritten(correlationId: string): void {
   dedupCache.set(correlationId, true);
 }
-
-function wasWrittenByUs(correlationId: string): boolean {
-  return dedupCache.has(correlationId);
+function wasWrittenByUs(id: string): boolean {
+  return dedupCache.has(id);
 }
 
-// ─── Field Mapping Helpers ───────────────────────────────────────────────────
-
-function getFieldMappings(siteId: string): FieldMapping[] {
-  const db = getDb();
-  return db
-    .prepare('SELECT * FROM field_mappings WHERE site_id = ?')
-    .all(siteId) as FieldMapping[];
-}
-
+// ─── Field mapping helpers ───
 function applyTransform(value: string, transform?: string | null): string {
   if (!transform || !value) return value;
   switch (transform) {
@@ -45,113 +38,65 @@ function applyTransform(value: string, transform?: string | null): string {
 
 function buildHubSpotProperties(
   wixContact: WixContact,
-  mappings: FieldMapping[],
+  mappings: IFieldMapping[],
   correlationId: string,
-  source: 'wix' | 'hubspot',
 ): Record<string, string> {
   const props: Record<string, string> = {
     wix_contact_id: wixContact.id,
     wix_sync_correlation_id: correlationId,
-    wix_sync_source: source,
+    wix_sync_source: 'wix',
   };
-
   const wixData: Record<string, string | undefined> = {
     primaryEmail: wixContact.primaryEmail,
     firstName: wixContact.firstName,
     lastName: wixContact.lastName,
     primaryPhone: wixContact.phones?.[0]?.phone,
   };
-
-  for (const mapping of mappings) {
-    if (mapping.direction === 'hubspot_to_wix') continue;
-    const rawVal = wixData[mapping.wixField];
-    if (rawVal !== undefined && rawVal !== null) {
-      props[mapping.hubspotProperty] = applyTransform(rawVal, mapping.transform);
-    }
+  for (const m of mappings) {
+    if (m.direction === 'hubspot_to_wix') continue;
+    const raw = wixData[m.wixField];
+    if (raw != null) props[m.hubspotProperty] = applyTransform(raw, m.transform);
   }
-
   return props;
 }
 
 function buildWixFields(
   hsContact: HubSpotContact,
-  mappings: FieldMapping[],
+  mappings: IFieldMapping[],
 ): Partial<WixContact> {
-  const wixFields: Partial<WixContact> & { primaryEmail?: string; firstName?: string; lastName?: string } = {};
-
-  for (const mapping of mappings) {
-    if (mapping.direction === 'wix_to_hubspot') continue;
-    const val = hsContact.properties[mapping.hubspotProperty];
-    if (val !== undefined && val !== null) {
-      const transformed = applyTransform(val, mapping.transform);
-      switch (mapping.wixField) {
-        case 'primaryEmail': wixFields.primaryEmail = transformed; break;
-        case 'firstName': wixFields.firstName = transformed; break;
-        case 'lastName': wixFields.lastName = transformed; break;
-      }
-    }
+  const fields: Record<string, string> = {};
+  for (const m of mappings) {
+    if (m.direction === 'wix_to_hubspot') continue;
+    const val = hsContact.properties[m.hubspotProperty];
+    if (val != null) fields[m.wixField] = applyTransform(val, m.transform);
   }
-
-  return wixFields;
+  return {
+    ...(fields.primaryEmail && { primaryEmail: fields.primaryEmail }),
+    ...(fields.firstName && { firstName: fields.firstName }),
+    ...(fields.lastName && { lastName: fields.lastName }),
+  };
 }
 
-// ─── Contact Mapping Store ───────────────────────────────────────────────────
-
-function getContactMappingByWix(wixId: string): { hubspotContactId: string } | null {
-  const db = getDb();
-  return db.prepare('SELECT hubspot_contact_id as hubspotContactId FROM contact_mappings WHERE wix_contact_id = ?').get(wixId) as { hubspotContactId: string } | null;
-}
-
-function getContactMappingByHubSpot(hsId: string): { wixContactId: string } | null {
-  const db = getDb();
-  return db.prepare('SELECT wix_contact_id as wixContactId FROM contact_mappings WHERE hubspot_contact_id = ?').get(hsId) as { wixContactId: string } | null;
-}
-
-function upsertContactMapping(
-  wixId: string,
-  hsId: string,
-  source: 'wix' | 'hubspot',
-): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO contact_mappings (wix_contact_id, hubspot_contact_id, last_synced_at, last_sync_source)
-    VALUES (?, ?, datetime('now'), ?)
-    ON CONFLICT(wix_contact_id) DO UPDATE SET
-      hubspot_contact_id = excluded.hubspot_contact_id,
-      last_synced_at = excluded.last_synced_at,
-      last_sync_source = excluded.last_sync_source
-  `).run(wixId, hsId, source);
-}
-
-function logSync(
+async function logSync(
   siteId: string,
-  direction: string,
+  direction: 'wix_to_hubspot' | 'hubspot_to_wix' | 'form_to_hubspot',
   status: 'success' | 'skipped' | 'error',
   correlationId: string,
   opts: { wixContactId?: string; hubspotContactId?: string; reason?: string } = {},
-): void {
-  const db = getDb();
-  db.prepare(`
-    INSERT INTO sync_log (site_id, direction, wix_contact_id, hubspot_contact_id, status, reason, correlation_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+): Promise<void> {
+  await SyncLog.create({
     siteId,
     direction,
-    opts.wixContactId ?? null,
-    opts.hubspotContactId ?? null,
     status,
-    opts.reason ?? null,
     correlationId,
-  );
+    wixContactId: opts.wixContactId,
+    hubspotContactId: opts.hubspotContactId,
+    reason: opts.reason,
+  });
 }
 
-// ─── Core Sync Methods ───────────────────────────────────────────────────────
-
+// ─── Core sync ────────
 export class SyncService {
-  /**
-   * Sync a Wix contact to HubSpot.
-   * Called when Wix fires a CONTACT_CREATED or CONTACT_UPDATED webhook.
-   */
   async syncWixToHubSpot(
     siteId: string,
     wixContact: WixContact,
@@ -159,71 +104,60 @@ export class SyncService {
   ): Promise<SyncResult> {
     const correlationId = uuidv4();
 
-    // ── Loop prevention: was this change produced by our own HubSpot→Wix write?
     if (incomingCorrelationId && wasWrittenByUs(incomingCorrelationId)) {
-      logger.debug('Skipping Wix→HubSpot: produced by our own write', { incomingCorrelationId });
-      logSync(siteId, 'wix_to_hubspot', 'skipped', correlationId, {
-        wixContactId: wixContact.id,
-        reason: 'correlation_id_dedup',
+      await logSync(siteId, 'wix_to_hubspot', 'skipped', correlationId, {
+        wixContactId: wixContact.id, reason: 'correlation_id_dedup',
       });
       return { success: true, action: 'skipped', correlationId, reason: 'dedup' };
     }
 
-    const mappings = getFieldMappings(siteId);
-    const props = buildHubSpotProperties(wixContact, mappings, correlationId, 'wix');
-    const existingMapping = getContactMappingByWix(wixContact.id);
+    const mappings = await FieldMapping.find({ siteId }).lean();
+    const props = buildHubSpotProperties(wixContact, mappings, correlationId);
+    const existing = await ContactMapping.findOne({ wixContactId: wixContact.id }).lean();
 
     try {
       let hsContact: HubSpotContact;
 
-      if (existingMapping) {
-        // Update existing HubSpot contact
-        hsContact = await hubspotService.updateContact(siteId, existingMapping.hubspotContactId, props);
-        markWritten(correlationId); // mark so HubSpot webhook for this write is ignored
-        upsertContactMapping(wixContact.id, hsContact.id, 'wix');
-        logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
-          wixContactId: wixContact.id,
-          hubspotContactId: hsContact.id,
-          reason: 'updated',
+      if (existing) {
+        hsContact = await hubspotService.updateContact(siteId, existing.hubspotContactId, props);
+        markWritten(correlationId);
+        await ContactMapping.findOneAndUpdate(
+          { wixContactId: wixContact.id },
+          { lastSyncedAt: new Date(), lastSyncSource: 'wix' },
+        );
+        await logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
+          wixContactId: wixContact.id, hubspotContactId: hsContact.id, reason: 'updated',
         });
         return { success: true, action: 'updated', correlationId, wixContactId: wixContact.id, hubspotContactId: hsContact.id };
-      } else {
-        // Create new HubSpot contact
-        if (!wixContact.primaryEmail) {
-          logSync(siteId, 'wix_to_hubspot', 'skipped', correlationId, {
-            wixContactId: wixContact.id,
-            reason: 'no_email',
-          });
-          return { success: true, action: 'skipped', correlationId, reason: 'no_email' };
-        }
-        hsContact = await hubspotService.createContact(siteId, {
-          email: wixContact.primaryEmail,
-          ...props,
-        });
-        markWritten(correlationId);
-        upsertContactMapping(wixContact.id, hsContact.id, 'wix');
-        logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
-          wixContactId: wixContact.id,
-          hubspotContactId: hsContact.id,
-          reason: 'created',
-        });
-        return { success: true, action: 'created', correlationId, wixContactId: wixContact.id, hubspotContactId: hsContact.id };
       }
+
+      if (!wixContact.primaryEmail) {
+        await logSync(siteId, 'wix_to_hubspot', 'skipped', correlationId, {
+          wixContactId: wixContact.id, reason: 'no_email',
+        });
+        return { success: true, action: 'skipped', correlationId, reason: 'no_email' };
+      }
+
+      hsContact = await hubspotService.createContact(siteId, { email: wixContact.primaryEmail, ...props });
+      markWritten(correlationId);
+      await ContactMapping.create({
+        wixContactId: wixContact.id,
+        hubspotContactId: hsContact.id,
+        lastSyncedAt: new Date(),
+        lastSyncSource: 'wix',
+      });
+      await logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
+        wixContactId: wixContact.id, hubspotContactId: hsContact.id, reason: 'created',
+      });
+      return { success: true, action: 'created', correlationId, wixContactId: wixContact.id, hubspotContactId: hsContact.id };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       logger.error('Wix→HubSpot sync failed', { wixContactId: wixContact.id, reason });
-      logSync(siteId, 'wix_to_hubspot', 'error', correlationId, {
-        wixContactId: wixContact.id,
-        reason,
-      });
+      await logSync(siteId, 'wix_to_hubspot', 'error', correlationId, { wixContactId: wixContact.id, reason });
       return { success: false, action: 'error', correlationId, reason };
     }
   }
 
-  /**
-   * Sync a HubSpot contact to Wix.
-   * Called when HubSpot fires a contact.creation or contact.propertyChange webhook.
-   */
   async syncHubSpotToWix(
     siteId: string,
     hubspotContactId: string,
@@ -231,12 +165,9 @@ export class SyncService {
   ): Promise<SyncResult> {
     const correlationId = uuidv4();
 
-    // ── Loop prevention: was this change produced by our own Wix→HubSpot write?
     if (incomingCorrelationId && wasWrittenByUs(incomingCorrelationId)) {
-      logger.debug('Skipping HubSpot→Wix: produced by our own write', { incomingCorrelationId });
-      logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, {
-        hubspotContactId,
-        reason: 'correlation_id_dedup',
+      await logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, {
+        hubspotContactId, reason: 'correlation_id_dedup',
       });
       return { success: true, action: 'skipped', correlationId, reason: 'dedup' };
     }
@@ -244,90 +175,81 @@ export class SyncService {
     try {
       const hsContact = await hubspotService.getContact(siteId, hubspotContactId);
 
-      // ── Secondary loop check: if wix_sync_source == 'wix', this came from us
+      // Secondary: origin tag check
       if (hsContact.properties['wix_sync_source'] === 'wix') {
-        const storedCorrelation = hsContact.properties['wix_sync_correlation_id'];
-        if (storedCorrelation && wasWrittenByUs(storedCorrelation)) {
-          logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, {
-            hubspotContactId,
-            reason: 'origin_tag_dedup',
+        const storedCid = hsContact.properties['wix_sync_correlation_id'];
+        if (storedCid && wasWrittenByUs(storedCid)) {
+          await logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, {
+            hubspotContactId, reason: 'origin_tag_dedup',
           });
           return { success: true, action: 'skipped', correlationId, reason: 'origin_tag' };
         }
       }
 
-      const mappings = getFieldMappings(siteId);
+      const mappings = await FieldMapping.find({ siteId }).lean();
       const wixFields = buildWixFields(hsContact, mappings);
-      const existingMapping = getContactMappingByHubSpot(hubspotContactId);
+      const existing = await ContactMapping.findOne({ hubspotContactId }).lean();
 
       let wixContact: WixContact;
 
-      if (existingMapping) {
-        // Update existing Wix contact
-        wixContact = await wixService.updateContact(siteId, existingMapping.wixContactId, wixFields);
+      if (existing) {
+        wixContact = await wixService.updateContact(siteId, existing.wixContactId, wixFields);
         markWritten(correlationId);
-        upsertContactMapping(wixContact.id, hubspotContactId, 'hubspot');
-        logSync(siteId, 'hubspot_to_wix', 'success', correlationId, {
-          wixContactId: wixContact.id,
-          hubspotContactId,
-          reason: 'updated',
+        await ContactMapping.findOneAndUpdate(
+          { hubspotContactId },
+          { lastSyncedAt: new Date(), lastSyncSource: 'hubspot' },
+        );
+        await logSync(siteId, 'hubspot_to_wix', 'success', correlationId, {
+          wixContactId: wixContact.id, hubspotContactId, reason: 'updated',
         });
         return { success: true, action: 'updated', correlationId, wixContactId: wixContact.id, hubspotContactId };
-      } else {
-        // Check if Wix already has this contact by email
-        const email = hsContact.properties['email'];
-        if (!email) {
-          logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, { hubspotContactId, reason: 'no_email' });
-          return { success: true, action: 'skipped', correlationId, reason: 'no_email' };
-        }
-
-        const existing = await wixService.queryContactByEmail(siteId, email);
-        if (existing) {
-          wixContact = await wixService.updateContact(siteId, existing.id, wixFields);
-        } else {
-          wixContact = await wixService.createContact(siteId, {
-            primaryEmail: email,
-            ...wixFields,
-          });
-        }
-
-        markWritten(correlationId);
-        upsertContactMapping(wixContact.id, hubspotContactId, 'hubspot');
-        logSync(siteId, 'hubspot_to_wix', 'success', correlationId, {
-          wixContactId: wixContact.id,
-          hubspotContactId,
-          reason: existing ? 'updated' : 'created',
-        });
-        return {
-          success: true,
-          action: existing ? 'updated' : 'created',
-          correlationId,
-          wixContactId: wixContact.id,
-          hubspotContactId,
-        };
       }
+
+      const email = hsContact.properties['email'];
+      if (!email) {
+        await logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, { hubspotContactId, reason: 'no_email' });
+        return { success: true, action: 'skipped', correlationId, reason: 'no_email' };
+      }
+
+      const existingWix = await wixService.queryContactByEmail(siteId, email);
+      if (existingWix) {
+        wixContact = await wixService.updateContact(siteId, existingWix.id, wixFields);
+      } else {
+        wixContact = await wixService.createContact(siteId, { primaryEmail: email, ...wixFields });
+      }
+
+      markWritten(correlationId);
+      await ContactMapping.create({
+        wixContactId: wixContact.id,
+        hubspotContactId,
+        lastSyncedAt: new Date(),
+        lastSyncSource: 'hubspot',
+      });
+      await logSync(siteId, 'hubspot_to_wix', 'success', correlationId, {
+        wixContactId: wixContact.id,
+        hubspotContactId,
+        reason: existingWix ? 'updated' : 'created',
+      });
+      return {
+        success: true,
+        action: existingWix ? 'updated' : 'created',
+        correlationId,
+        wixContactId: wixContact.id,
+        hubspotContactId,
+      };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       logger.error('HubSpot→Wix sync failed', { hubspotContactId, reason });
-      logSync(siteId, 'hubspot_to_wix', 'error', correlationId, { hubspotContactId, reason });
+      await logSync(siteId, 'hubspot_to_wix', 'error', correlationId, { hubspotContactId, reason });
       return { success: false, action: 'error', correlationId, reason };
     }
   }
 
-  /** Get recent sync log entries for a site */
-  getRecentSyncLog(
-    siteId: string,
-    limit = 50,
-  ): Array<Record<string, unknown>> {
-    const db = getDb();
-    return db
-      .prepare(`
-        SELECT * FROM sync_log
-        WHERE site_id = ?
-        ORDER BY created_at DESC
-        LIMIT ?
-      `)
-      .all(siteId, limit) as Array<Record<string, unknown>>;
+  async getRecentSyncLog(siteId: string, limit = 50) {
+    return SyncLog.find({ siteId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
   }
 }
 
