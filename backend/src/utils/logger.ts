@@ -1,5 +1,5 @@
 import { createLogger, format, transports } from 'winston';
-import { config } from '../config';
+import { config } from '../configs/index.js';
 
 const REDACTED = '[REDACTED]';
 
@@ -25,6 +25,20 @@ function sanitize(obj: unknown): unknown {
   return result;
 }
 
+// Vercel's filesystem is read-only except for /tmp.
+// Gracefully fall back to Console-only if file transports fail.
+function buildFileTransports(): transports.FileTransportInstance[] {
+  try {
+    const logDir = '/tmp/logs';
+    return [
+      new transports.File({ filename: `${logDir}/error.log`, level: 'error' }),
+      new transports.File({ filename: `${logDir}/combined.log` }),
+    ];
+  } catch {
+    return [];
+  }
+}
+
 export const logger = createLogger({
   level: config.isProd ? 'info' : 'debug',
   format: format.combine(
@@ -40,9 +54,6 @@ export const logger = createLogger({
   ),
   transports: [
     new transports.Console(),
-    ...(config.isProd
-      ? [new transports.File({ filename: 'logs/error.log', level: 'error' }),
-         new transports.File({ filename: 'logs/combined.log' })]
-      : []),
+    ...(config.isProd ? buildFileTransports() : []),
   ],
 });

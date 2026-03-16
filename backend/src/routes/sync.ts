@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { syncService } from '../services/sync.service';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import { SyncLog } from '../models/syncLog.model';
-import { ContactMapping } from '../models/contactMapping.model';
+import { syncService } from '../services/sync.service.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { SyncLog } from '../models/syncLog.model.js';
+import { ContactMapping } from '../models/contactMapping.model.js';
 
 const router = Router();
 

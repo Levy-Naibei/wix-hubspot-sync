@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { FieldMapping } from '../models/fieldMapping.model';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import { hubspotService } from '../services/hubspot.service';
-import { wixService } from '../services/wix.service';
-import { tokenService } from '../services/token.service';
-import { logger } from '../utils/logger';
+import { FieldMapping } from '../models/fieldMapping.model.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { hubspotService } from '../services/hubspot.service.js';
+import { wixService } from '../services/wix.service.js';
+import { tokenService } from '../services/token.service.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 

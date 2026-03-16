@@ -2,11 +2,11 @@ import dotenv from 'dotenv';
 dotenv.config({ path: './../.env' });
 
 
-function required(key: string): string {
-  const val = process.env[key];
-  if (!val) throw new Error(`Missing required env var: ${key}`);
-  return val;
-}
+// function required(key: string): string {
+//   const val = process.env[key];
+//   if (!val) throw new Error(`Missing required env var: ${key}`);
+//   return val;
+// }
 
 function optional(key: string, fallback: string): string {
   return process.env[key] ?? fallback;
@@ -46,7 +46,6 @@ export const config = {
 
   encryptionKey: optional('ENCRYPTION_KEY', 'a'.repeat(64)),
   frontendUrl: optional('FRONTEND_URL', 'http://localhost:5173'),
-  dbPath: optional('DB_PATH', './data/integration.db'),
 
   sync: {
     dedupWindowMs: 30_000, // 30s window for loop prevention

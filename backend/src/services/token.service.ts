@@ -1,8 +1,8 @@
 import crypto from 'crypto';
-import { Token } from '../models/token.model';
-import { config } from '../config';
-import { HubSpotTokens } from '../types';
-import { logger } from '../utils/logger';
+import { Token } from '../models/token.model.js';
+import { config } from '../configs/index.js';
+import { HubSpotTokens } from '../types/index.js';
+import { logger } from '../utils/logger.js';
 
 const ALGORITHM = 'aes-256-gcm';
 const KEY = Buffer.from(config.encryptionKey.slice(0, 64), 'hex');

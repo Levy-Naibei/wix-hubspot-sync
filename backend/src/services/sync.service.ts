@@ -1,13 +1,13 @@
 import NodeCache from 'node-cache';
 import { v4 as uuidv4 } from 'uuid';
-import { ContactMapping } from '../models/contactMapping.model';
-import { FieldMapping, IFieldMapping } from '../models/fieldMapping.model';
-import { SyncLog } from '../models/syncLog.model';
-import { hubspotService } from './hubspot.service';
-import { wixService } from './wix.service';
-import { SyncResult, WixContact, HubSpotContact } from '../types';
-import { logger } from '../utils/logger';
-import { config } from '../config';
+import { ContactMapping } from '../models/contactMapping.model.js';
+import { FieldMapping, IFieldMapping } from '../models/fieldMapping.model.js';
+import { SyncLog } from '../models/syncLog.model.js';
+import { hubspotService } from './hubspot.service.js';
+import { wixService } from './wix.service.js';
+import { SyncResult, WixContact, HubSpotContact } from '../types/index.js';
+import { logger } from '../utils/logger.js';
+import { config } from '../configs/index.js';
 
 // ─── Deduplication Cache ──────
 // TTL-based in-memory cache to track correlation IDs of our own writes.

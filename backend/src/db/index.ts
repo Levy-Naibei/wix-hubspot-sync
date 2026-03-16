@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { config } from '../config';
-import { logger } from '../utils/logger';
+import { config } from '../configs/index.js';
+import { logger } from '../utils/logger.js';
 
 let connected = false;
 

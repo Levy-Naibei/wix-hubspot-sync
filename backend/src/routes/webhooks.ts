@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { syncService } from '../services/sync.service';
-import { verifyHubSpotWebhook, verifyWixWebhook } from '../middleware/auth';
-import { WixWebhookPayload, HubSpotWebhookEvent } from '../types';
-import { logger } from '../utils/logger';
+import { syncService } from '../services/sync.service.js';
+import { verifyHubSpotWebhook, verifyWixWebhook } from '../middleware/auth.js';
+import { WixWebhookPayload, HubSpotWebhookEvent } from '../types/index.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 

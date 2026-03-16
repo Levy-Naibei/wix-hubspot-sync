@@ -1,6 +1,6 @@
-import { config } from '../config';
-import { WixContact } from '../types';
-import { logger } from '../utils/logger';
+import { config } from '../configs/index.js';
+import { WixContact } from '../types/index.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Wix API service for contacts management.

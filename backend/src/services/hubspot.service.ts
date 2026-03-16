@@ -1,9 +1,9 @@
 import { Client as HubSpotClient } from '@hubspot/api-client';
-import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/contacts';
-import { config } from '../config';
-import { tokenService } from './token.service';
-import { HubSpotContact, HubSpotTokens } from '../types';
-import { logger } from '../utils/logger';
+import { FilterOperatorEnum } from '@hubspot/api-client/lib/codegen/crm/contacts/index.js';
+import { config } from '../configs/index.js';
+import { tokenService } from './token.service.js';
+import { HubSpotContact, HubSpotTokens } from '../types/index.js';
+import { logger } from '../utils/logger.js';
 
 export class HubSpotService {
   private async getClient(siteId: string): Promise<HubSpotClient> {

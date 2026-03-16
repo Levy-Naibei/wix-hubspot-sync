@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
-import { hubspotService } from '../services/hubspot.service';
-import { tokenService } from '../services/token.service';
-import { SyncLog } from '../models/syncLog.model';
-import { logger } from '../utils/logger';
+import { hubspotService } from '../services/hubspot.service.js';
+import { tokenService } from '../services/token.service.js';
+import { SyncLog } from '../models/syncLog.model.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 

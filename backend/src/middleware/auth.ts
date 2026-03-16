@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { config } from '../config';
-import { logger } from '../utils/logger';
+import { config } from '../configs/index.js';
+import { logger } from '../utils/logger.js';
 
 export interface AuthenticatedRequest extends Request {
   siteId: string;

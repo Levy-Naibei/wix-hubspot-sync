@@ -1,9 +1,9 @@
 import { Router, Request, Response } from 'express';
-import { config } from '../config';
-import { hubspotService } from '../services/hubspot.service';
-import { tokenService } from '../services/token.service';
-import { requireAuth, AuthenticatedRequest } from '../middleware/auth';
-import { logger } from '../utils/logger';
+import { config } from '../configs/index.js';
+import { hubspotService } from '../services/hubspot.service.js';
+import { tokenService } from '../services/token.service.js';
+import { requireAuth, AuthenticatedRequest } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 
 const router = Router();
 
