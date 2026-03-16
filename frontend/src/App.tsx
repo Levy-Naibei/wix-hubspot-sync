@@ -19,7 +19,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-150 ${
+      className={`cursor-pointer px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-150 ${
         active
           ? "bg-white text-slate-900 shadow-sm border border-slate-200"
           : "text-slate-500 hover:text-slate-700 hover:bg-white/50"

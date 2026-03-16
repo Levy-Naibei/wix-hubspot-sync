@@ -124,7 +124,7 @@ export function SyncLog({ connected }: { connected: boolean }) {
             No sync activity yet. Sync events will appear here.
           </div>
         )}
-        {entries.map((entry) => (
+        {entries.length > 0 && entries.map((entry) => (
           <div key={entry.id} className="flex items-center gap-3 px-6 py-3 hover:bg-slate-50 transition-colors">
             <span
               className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-md ${

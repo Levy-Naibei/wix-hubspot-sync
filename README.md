@@ -1,5 +1,3 @@
-[![Netlify Status](https://api.netlify.com/api/v1/badges/5a569680-faec-4101-83ce-093f20c7ca7a/deploy-status)](https://app.netlify.com/projects/wix-hubspot-sync/deploys)
-
 # Wix ↔ HubSpot Sync
 
  - A production-ready, responsive, self-hosted Wix app enabling bi-directional contact sync, form lead capture with UTM attribution, secure OAuth 2.0 token management, and a field-mapping dashboard UI.
