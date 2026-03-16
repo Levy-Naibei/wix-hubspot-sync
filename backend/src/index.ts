@@ -10,6 +10,7 @@ import fieldMappingRoutes from "./routes/fieldMapping.js";
 import webhookRoutes from "./routes/webhooks.js";
 import formRoutes from "./routes/forms.js";
 import syncRoutes from "./routes/sync.js";
+import homeRoute from "./routes/home.js";
 
 const app = express();
 
@@ -59,13 +60,7 @@ app.use(
 );
 
 // ─── Routes ───
-app.get("/", (_req: Request, res: Response) => {
-  res.json({
-    service: "Wix-HubSpot Integration API",
-    status: "running",
-  });
-});
-
+app.use("", homeRoute);
 app.use("/api/auth", authRoutes);
 app.use("/api/field-mapping", fieldMappingRoutes);
 app.use("/api/webhooks", webhookRoutes);
