@@ -28,13 +28,43 @@ const FormSubmissionSchema = z.object({
   formName: z.string().optional(),
 });
 
+const PROPERTY_MAP: Record<string, string> = {
+  utm_source: 'hs_analytics_source',
+  utm_medium: 'hs_analytics_medium',
+  utm_campaign: 'hs_analytics_campaign',
+  utm_term: 'utm_term', // if present in your portal
+  utm_content: 'utm_content', // if present
+  pageUrl: 'hs_analytics_last_url',
+  referrer: 'hs_analytics_last_referrer',
+  form_submitted_at: 'hs_analytics_last_touch_converting_campaign', // optional fallback
+  wix_form_id: 'wix_form_id', // you can create this property in HubSpot
+  wix_form_name: 'wix_form_name', // same
+  wix_sync_source: 'wix_sync_source', // same
+  wix_sync_correlation_id: 'wix_sync_correlation_id', // same
+};
+
+function filterValidProperties(
+  candidate: Record<string, string | undefined>,
+  allowed: Set<string>,
+): Record<string, string> {
+  return Object.entries(candidate).reduce((acc, [k, v]) => {
+    if (!v) return acc;
+    const mapped = PROPERTY_MAP[k] ?? k;
+    if (allowed.has(mapped)) {
+      acc[mapped] = v;
+    } else {
+      logger.warn('Skipping non-existing HubSpot property', { property: mapped });
+    }
+    return acc;
+  }, {} as Record<string, string>);
+}
+
 /** POST /api/forms/submit */
 router.post('/submit', async (req: Request, res: Response) => {
   const parsed = FormSubmissionSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid submission', details: parsed.error.flatten() });
   }
-
   const data = parsed.data;
   const correlationId = uuidv4();
 
@@ -44,25 +74,34 @@ router.post('/submit', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'HubSpot not connected for this site' });
     }
 
-    const properties: Record<string, string> = {
+    const props = await hubspotService.getContactProperties(data.siteId);
+    const allowedProps = new Set(props.map((p) => p.name));
+
+    const submissionProperties: Record<string, string | undefined> = {
       email: data.email,
-      ...(data.firstName && { firstname: data.firstName }),
-      ...(data.lastName && { lastname: data.lastName }),
-      ...(data.phone && { phone: data.phone }),
-      ...(data.utm?.source && { utm_source: data.utm.source }),
-      ...(data.utm?.medium && { utm_medium: data.utm.medium }),
-      ...(data.utm?.campaign && { utm_campaign: data.utm.campaign }),
-      ...(data.utm?.term && { utm_term: data.utm.term }),
-      ...(data.utm?.content && { utm_content: data.utm.content }),
-      ...(data.pageUrl && { form_page_url: data.pageUrl }),
-      ...(data.referrer && { form_referrer: data.referrer }),
+      firstname: data.firstName || undefined,
+      lastname: data.lastName || undefined,
+      phone: data.phone || undefined,
+      utm_source: data.utm?.source || undefined,
+      utm_medium: data.utm?.medium || undefined,
+      utm_campaign: data.utm?.campaign || undefined,
+      utm_term: data.utm?.term || undefined,
+      utm_content: data.utm?.content || undefined,
+      pageUrl: data.pageUrl || undefined,
+      referrer: data.referrer || undefined,
       form_submitted_at: new Date().toISOString(),
-      ...(data.formId && { wix_form_id: data.formId }),
-      ...(data.formName && { wix_form_name: data.formName }),
-      ...data.customFields,
+      wix_form_id: data.formId || undefined,
+      wix_form_name: data.formName || undefined,
       wix_sync_source: 'form',
       wix_sync_correlation_id: correlationId,
+      ...data.customFields,
     };
+
+    const properties = filterValidProperties(submissionProperties, allowedProps);
+
+    if (Object.keys(properties).length === 0) {
+      return res.status(400).json({ error: 'No valid HubSpot contact properties available' });
+    }
 
     const hsContact = await hubspotService.upsertContactByEmail(data.siteId, data.email, properties);
 
@@ -79,12 +118,13 @@ router.post('/submit', async (req: Request, res: Response) => {
       siteId: data.siteId,
       hubspotContactId: hsContact.id,
       correlationId,
+      properties: Object.keys(properties),
     });
 
     res.json({ success: true, correlationId, hubspotContactId: hsContact.id });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    logger.error('Form submission error', { reason });
+    logger.error('Form submission error', { reason, siteId: data.siteId });
     res.status(500).json({ error: 'Failed to sync form submission' });
   }
 });

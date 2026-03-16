@@ -11,7 +11,6 @@ import webhookRoutes from "./routes/webhooks.js";
 import formRoutes from "./routes/forms.js";
 import syncRoutes from "./routes/sync.js";
 import homeRoute from "./routes/home.js";
-import { connect } from "mongoose";
 import { connectDb } from "./db/index.js";
 
 const app = express();
