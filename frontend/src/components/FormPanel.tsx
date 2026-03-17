@@ -245,7 +245,7 @@ export function FormsPanel({ connected }: { connected: boolean }) {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${
+              className={`cursor-pointer px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${
                 tab === id
                   ? "border-blue-500 text-blue-600 bg-blue-50/50"
                   : "border-transparent text-slate-500 hover:text-slate-700"

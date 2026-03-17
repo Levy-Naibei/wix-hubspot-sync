@@ -25,7 +25,7 @@ export function useConnection() {
   useEffect(() => {
     refresh();
 
-    // Check for OAuth callback result in URL params
+    // // Check for OAuth callback result in URL params
     // const params = new URLSearchParams(window.location.search);
     // if (params.get('connected') === 'true') {
     //   window.history.replaceState({}, '', window.location.pathname);
@@ -36,8 +36,7 @@ export function useConnection() {
   const connect = useCallback(async () => {
     try {
       const { authUrl } = await authApi.getAuthUrl();
-      // window.location.href = authUrl;
-      // Open OAuth popup
+
       const width = 900;
       const height = 800;
       const left = window.screenX + (window.outerWidth - width) / 2;
@@ -54,30 +53,54 @@ export function useConnection() {
         return;
       }
 
-      // Listen for completion message from the popup
+      let settled = false;
+
+      function cleanup() {
+        clearInterval(pollInterval);
+        window.removeEventListener('message', handleMessage);
+        try { popup?.close(); } catch (_) { }
+      }
+
+      // --- Primary path: postMessage from the callback page ---
+      // event.origin will be the backend server's origin (the callback page is served
+      // by the backend). Validate against VITE_BACKEND_ORIGIN, not the frontend origin.
       const handleMessage = (event: MessageEvent) => {
-        // IMPORTANT: restrict origin to your backend/front-end domain
-        const allowedOrigin = API_BASE;
-        if (event.origin !== allowedOrigin) return;
+        // console.log('received message', { origin: event.origin, data: event.data });
+
+        if (!API_BASE) {
+          console.warn('VITE_BACKEND_ORIGIN is not set — skipping origin check');
+        } else if (event.origin !== API_BASE) {
+          console.log('origin mismatch, expected', API_BASE, 'got', event.origin);
+          return;
+        }
 
         if (event.data === 'hubspot_oauth_success') {
-          // OAuth done → refresh connection status
+          settled = true;
+          cleanup();
           refresh();
-          // Remove listener
-          window.removeEventListener('message', handleMessage);
-          // Close popup if still open
-          try {
-            popup.close();
-          } catch (e) { }
         } else if (event.data === 'hubspot_oauth_error') {
+          settled = true;
           setError('OAuth failed. Please try again.');
-          window.removeEventListener('message', handleMessage);
-          try {
-            popup.close();
-          } catch (e) { }
+          cleanup();
         }
       };
       window.addEventListener('message', handleMessage);
+
+      // --- Fallback path: poll while the popup is open ---
+      // If postMessage is blocked (e.g. by Wix iframe sandboxing), this detects
+      // when the popup closes and re-fetches status regardless of the outcome.
+      const pollInterval = setInterval(async () => {
+        if (!popup || popup.closed) {
+          clearInterval(pollInterval);
+          window.removeEventListener('message', handleMessage);
+
+          if (!settled) {
+            // postMessage never arrived — re-fetch status to pick up any change
+            await refresh();
+          }
+        }
+      }, 1000);
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to start OAuth';
       console.error('Connection error', err);
@@ -98,5 +121,7 @@ export function useConnection() {
     }
   }, []);
 
-  return { status, loading, error, connect, disconnect, disconnecting, refresh };
+  const connected = status?.connected ?? false;
+
+  return { connected, status, loading, error, connect, disconnect, disconnecting, refresh };
 }

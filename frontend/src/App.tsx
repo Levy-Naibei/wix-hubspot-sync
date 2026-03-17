@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { ConnectPanel } from "./components/ConnectPanel";
 import { FormsPanel } from "./components/FormPanel";
 import { FieldMappingTable } from "./components/FieldMappingTable";
 import { SyncLog } from "./components/SyncLog";
-import { authApi } from "./api/client";
+// import { authApi } from "./api/client";
+import { useConnection } from "./hooks/useConnection";
 
 type Tab = "overview" | "mapping" | "forms" | "activity";
 
@@ -32,14 +33,23 @@ function TabButton({
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("overview");
-  const [connected, setConnected] = useState(false);
+  // const [connected, setConnected] = useState(false);
+  const {
+    connected,
+    status,
+    loading,
+    error,
+    connect,
+    disconnect,
+    disconnecting,
+  } = useConnection();
 
-  useEffect(() => {
-    authApi
-      .getStatus()
-      .then((s) => setConnected(s.connected))
-      .catch(() => setConnected(false));
-  }, []);
+  // useEffect(() => {
+  //   authApi
+  //     .getStatus()
+  //     .then((s) => setConnected(s.connected))
+  //     .catch(() => setConnected(false));
+  // }, []);
 
   return (
     <div className="min-h-screen bg-linear-to-br from-slate-50 via-white to-blue-50/30 font-sans">
@@ -129,7 +139,15 @@ export default function App() {
           {/* Overview tab */}
           {tab === "overview" && (
             <>
-              <ConnectPanel />
+              <ConnectPanel
+                connected={connected}
+                portalId={status?.portalId ?? null}
+                loading={loading}
+                error={error}
+                connect={connect}
+                disconnect={disconnect}
+                disconnecting={disconnecting}
+              />
 
               {connected && (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
