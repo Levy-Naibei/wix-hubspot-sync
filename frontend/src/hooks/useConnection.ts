@@ -25,7 +25,7 @@ export function useConnection() {
   useEffect(() => {
     refresh();
 
-    // // Check for OAuth callback result in URL params
+    // Check for OAuth callback result in URL params
     // const params = new URLSearchParams(window.location.search);
     // if (params.get('connected') === 'true') {
     //   window.history.replaceState({}, '', window.location.pathname);
@@ -36,7 +36,8 @@ export function useConnection() {
   const connect = useCallback(async () => {
     try {
       const { authUrl } = await authApi.getAuthUrl();
-
+      // window.location.href = authUrl;
+      // Open OAuth popup
       const width = 900;
       const height = 800;
       const left = window.screenX + (window.outerWidth - width) / 2;

@@ -35,6 +35,8 @@ router.get('/hubspot', requireAuth, (req: Request, res: Response) => {
 router.get('/hubspot/callback', async (req: Request, res: Response) => {
   const { code, state, error } = req.query as Record<string, string>;
 
+  const parentOrigin = new URL(config.frontendUrl).origin;
+
   if (error) {
     logger.warn('HubSpot OAuth declined by user', { error });
     return res.send(renderOAuthResultPage({ success: false }));
@@ -99,10 +101,10 @@ function renderOAuthResultPage(opts: { success: boolean }) {
             } catch (e) {
               console.error('postMessage error', e);
             }
-            // Auto-close after a short delay to give postMessage time to deliver
+            // Auto-close after a short delay
             setTimeout(function () {
               window.close();
-            }, 1500);
+            }, 1000);
           })();
         </script>
       </body>
