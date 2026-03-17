@@ -9,10 +9,14 @@ function getSiteId(): string {
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Clipboard copy failed", err);
+    }
   };
   return (
     <button
@@ -56,40 +60,57 @@ function CopyButton({ text }: { text: string }) {
 
 const buildEmbedSnippet = (siteId: string, apiBase: string) =>
   `<!-- Step 1: Add to Wix Custom Code (Settings > Custom Code) -->
-<script src="${apiBase}/api/forms/snippet?siteId=${siteId}"></script>
+    <script src="${apiBase}/api/forms/snippet?siteId=${siteId}"></script>
 
-<!-- Step 2: Call from your Wix form's onSubmit -->
-<script>
-$w('#myForm').onSubmit(async () => {
-  await window.wixHubSpotSubmit({
-    email: $w('#emailInput').value,
-    firstName: $w('#firstNameInput').value,
-    lastName: $w('#lastNameInput').value,
-    // UTM params, pageUrl, referrer captured automatically
-  });
-});
-</script>`;
+    <!-- Step 2: Call from your Wix form's onSubmit -->
+    <script>
+    $w('#myForm').onSubmit(async () => {
+      await window.wixHubSpotSubmit({
+        email: $w('#emailInput').value,
+        firstName: $w('#firstNameInput').value,
+        lastName: $w('#lastNameInput').value,
+        // Optional: phone, customFields, etc.
+        // UTM params, pageUrl, referrer captured automatically
+      });
+    });
+    </script>`;
 
 const UTM_FIELDS = [
-  { prop: "utm_source", example: "google", desc: "Traffic source" },
-  { prop: "utm_medium", example: "cpc", desc: "Marketing medium" },
-  { prop: "utm_campaign", example: "spring-sale", desc: "Campaign name" },
-  { prop: "utm_term", example: "running+shoes", desc: "Paid search keyword" },
-  { prop: "utm_content", example: "banner-a", desc: "Ad variant" },
   {
-    prop: "form_page_url",
+    prop: "wix_utm_source",
+    example: "google",
+    desc: "Raw UTM source from URL",
+  },
+  { prop: "wix_utm_medium", example: "cpc", desc: "Raw UTM medium from URL" },
+  {
+    prop: "wix_utm_campaign",
+    example: "spring-sale",
+    desc: "Raw UTM campaign name from URL",
+  },
+  {
+    prop: "wix_utm_term",
+    example: "running+shoes",
+    desc: "Paid search keyword from URL",
+  },
+  {
+    prop: "wix_utm_content",
+    example: "banner-a",
+    desc: "Ad variant from URL",
+  },
+  {
+    prop: "wix_last_page_url",
     example: "https://site.com/cta",
     desc: "Page URL at submission",
   },
   {
-    prop: "form_referrer",
+    prop: "wix_last_referrer",
     example: "https://google.com",
-    desc: "document.referrer value",
+    desc: "document.referrer value at submission",
   },
   {
-    prop: "form_submitted_at",
+    prop: "wix_form_submitted_at",
     example: "2025-04-01T10:30:00Z",
-    desc: "ISO timestamp",
+    desc: "ISO timestamp of submission",
   },
   { prop: "wix_form_id", example: "form-abc123", desc: "Wix form identifier" },
   {
@@ -110,11 +131,9 @@ export function FormsPanel({ connected }: { connected: boolean }) {
     utm_source: "",
     utm_medium: "",
     utm_campaign: "",
-    // utm_term: "",
-    // utm_content: "",
-    pageUrl: window.location.href,
-    // form_referrer: ""
-    // form_submitted_at: ""
+    utm_term: "",
+    utm_content: "",
+    pageUrl: typeof window !== "undefined" ? window.location.href : "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; msg: string } | null>(
@@ -139,25 +158,44 @@ export function FormsPanel({ connected }: { connected: boolean }) {
             source: form.utm_source,
             medium: form.utm_medium,
             campaign: form.utm_campaign,
+            term: form.utm_term,
+            content: form.utm_content,
           },
           pageUrl: form.pageUrl,
-          referrer: document.referrer,
-          formName: "Test Form",
+          referrer:
+            typeof document !== "undefined" ? document.referrer : undefined,
+          formName: "Submit Form",
         }),
       });
-      const d = (await resp.json()) as {
+
+      let d: {
         success?: boolean;
         error?: string;
         hubspotContactId?: string;
-      };
-      setResult(
-        d.success
-          ? {
-              ok: true,
-              msg: `Synced to HubSpot — contact ID: ${d.hubspotContactId}`,
-            }
-          : { ok: false, msg: d.error || "Submission failed" },
-      );
+      } = {};
+
+      try {
+        d = (await resp.json()) as typeof d;
+      } catch {
+        setResult({
+          ok: false,
+          msg: `Invalid server response (status ${resp.status})`,
+        });
+        return;
+      }
+
+      if (!resp.ok || !d.success) {
+        setResult({
+          ok: false,
+          msg: d.error || `Submission failed (status ${resp.status})`,
+        });
+        return;
+      }
+
+      setResult({
+        ok: true,
+        msg: `Synced to HubSpot — contact ID: ${d.hubspotContactId}`,
+      });
     } catch (e) {
       setResult({
         ok: false,
@@ -171,7 +209,8 @@ export function FormsPanel({ connected }: { connected: boolean }) {
   if (!connected) {
     return (
       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-        <strong>HubSpot not connected.</strong> Go to the Overview tab and connect your account first.
+        <strong>HubSpot not connected.</strong> Go to the Overview tab and
+        connect your account first.
       </div>
     );
   }
@@ -206,7 +245,11 @@ export function FormsPanel({ connected }: { connected: boolean }) {
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${tab === id ? "border-blue-500 text-blue-600 bg-blue-50/50" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+              className={`px-4 py-2 text-sm font-semibold rounded-t-lg border-b-2 transition-colors ${
+                tab === id
+                  ? "border-blue-500 text-blue-600 bg-blue-50/50"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
             >
               <span className="font-mono mr-1 opacity-50">{icon}</span>
               {label}
@@ -251,7 +294,7 @@ export function FormsPanel({ connected }: { connected: boolean }) {
           {tab === "test" && (
             <div>
               <h4 className="font-semibold text-slate-900 text-sm mb-1">
-                Test Form Submission
+                Form Submission
               </h4>
               <p className="text-xs text-slate-500 mb-4">
                 Send a real contact to HubSpot to verify the integration
@@ -303,6 +346,18 @@ export function FormsPanel({ connected }: { connected: boolean }) {
                     type: "text",
                   },
                   {
+                    key: "utm_term",
+                    label: "UTM Term",
+                    placeholder: "running+shoes",
+                    type: "text",
+                  },
+                  {
+                    key: "utm_content",
+                    label: "UTM Content",
+                    placeholder: "banner-a",
+                    type: "text",
+                  },
+                  {
                     key: "pageUrl",
                     label: "Page URL",
                     placeholder: "https://…",
@@ -328,7 +383,11 @@ export function FormsPanel({ connected }: { connected: boolean }) {
 
               {result && (
                 <div
-                  className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${result.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}
+                  className={`mt-4 rounded-xl px-4 py-3 text-sm font-medium flex items-center gap-2 ${
+                    result.ok
+                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      : "bg-red-50 text-red-700 border border-red-200"
+                  }`}
                 >
                   {result.ok ? (
                     <svg
@@ -393,8 +452,7 @@ export function FormsPanel({ connected }: { connected: boolean }) {
             UTM Attribution Schema
           </h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Properties automatically set on every HubSpot contact from form
-            submissions.
+            HubSpot contact properties set from Wix form submissions.
           </p>
         </div>
         <div className="overflow-x-auto">
