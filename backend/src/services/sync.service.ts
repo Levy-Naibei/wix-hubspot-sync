@@ -113,7 +113,7 @@ export class SyncService {
 
     const mappings = await FieldMapping.find({ siteId }).lean();
     const props = buildHubSpotProperties(wixContact, mappings, correlationId);
-    const existing = await ContactMapping.findOne({ wixContactId: wixContact.id }).lean();
+    const existing = await ContactMapping.findOne({ siteId, wixContactId: wixContact.id }).lean();
 
     try {
       let hsContact: HubSpotContact;
@@ -122,13 +122,19 @@ export class SyncService {
         hsContact = await hubspotService.updateContact(siteId, existing.hubspotContactId, props);
         markWritten(correlationId);
         await ContactMapping.findOneAndUpdate(
-          { wixContactId: wixContact.id },
+          { siteId, wixContactId: wixContact.id },
           { lastSyncedAt: new Date(), lastSyncSource: 'wix' },
         );
         await logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
           wixContactId: wixContact.id, hubspotContactId: hsContact.id, reason: 'updated',
         });
-        return { success: true, action: 'updated', correlationId, wixContactId: wixContact.id, hubspotContactId: hsContact.id };
+        return {
+          success: true,
+          action: 'updated',
+          correlationId,
+          wixContactId: wixContact.id,
+          hubspotContactId: hsContact.id,
+        };
       }
 
       if (!wixContact.primaryEmail) {
@@ -141,6 +147,7 @@ export class SyncService {
       hsContact = await hubspotService.createContact(siteId, { email: wixContact.primaryEmail, ...props });
       markWritten(correlationId);
       await ContactMapping.create({
+        siteId,
         wixContactId: wixContact.id,
         hubspotContactId: hsContact.id,
         lastSyncedAt: new Date(),
@@ -149,7 +156,13 @@ export class SyncService {
       await logSync(siteId, 'wix_to_hubspot', 'success', correlationId, {
         wixContactId: wixContact.id, hubspotContactId: hsContact.id, reason: 'created',
       });
-      return { success: true, action: 'created', correlationId, wixContactId: wixContact.id, hubspotContactId: hsContact.id };
+      return {
+        success: true,
+        action: 'created',
+        correlationId,
+        wixContactId: wixContact.id,
+        hubspotContactId: hsContact.id,
+      };
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       logger.error('Wix→HubSpot sync failed', { wixContactId: wixContact.id, reason });
@@ -188,7 +201,7 @@ export class SyncService {
 
       const mappings = await FieldMapping.find({ siteId }).lean();
       const wixFields = buildWixFields(hsContact, mappings);
-      const existing = await ContactMapping.findOne({ hubspotContactId }).lean();
+      const existing = await ContactMapping.findOne({ siteId, hubspotContactId }).lean();
 
       let wixContact: WixContact;
 
@@ -196,18 +209,26 @@ export class SyncService {
         wixContact = await wixService.updateContact(siteId, existing.wixContactId, wixFields);
         markWritten(correlationId);
         await ContactMapping.findOneAndUpdate(
-          { hubspotContactId },
+          { siteId, hubspotContactId },
           { lastSyncedAt: new Date(), lastSyncSource: 'hubspot' },
         );
         await logSync(siteId, 'hubspot_to_wix', 'success', correlationId, {
           wixContactId: wixContact.id, hubspotContactId, reason: 'updated',
         });
-        return { success: true, action: 'updated', correlationId, wixContactId: wixContact.id, hubspotContactId };
+        return {
+          success: true,
+          action: 'updated',
+          correlationId,
+          wixContactId: wixContact.id,
+          hubspotContactId,
+        };
       }
 
       const email = hsContact.properties['email'];
       if (!email) {
-        await logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, { hubspotContactId, reason: 'no_email' });
+        await logSync(siteId, 'hubspot_to_wix', 'skipped', correlationId, {
+          hubspotContactId, reason: 'no_email',
+        });
         return { success: true, action: 'skipped', correlationId, reason: 'no_email' };
       }
 
@@ -220,6 +241,7 @@ export class SyncService {
 
       markWritten(correlationId);
       await ContactMapping.create({
+        siteId,
         wixContactId: wixContact.id,
         hubspotContactId,
         lastSyncedAt: new Date(),
