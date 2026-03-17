@@ -2,6 +2,8 @@
 
  - A production-ready, responsive, self-hosted Wix app enabling bi-directional contact sync, form lead capture with UTM attribution, secure OAuth 2.0 token management, and a field-mapping dashboard UI.
 
+ Note: `For successful Oauth Flow in WIX SITE, disable browser blockers if enabled or run in incognito window in browsers like Brave`
+
 ## Tech stack
   
   - Typescript
@@ -11,6 +13,8 @@
   - Vercel
   - Netlify
   - MongoDB
+
+  Note: Node v20 and above
 
 ## API Plan
 
@@ -38,23 +42,12 @@
 
 ## Quick Start
 
-> **Frontend setup:** the React app needs to know where the backend
-> lives.  you can either set `VITE_API_URL` in an `.env` file or rely on
-> the built‑in dev server proxy (it defaults to `http://localhost:3001`).
->
-> ```bash
-> # frontend/.env.development
-> VITE_API_URL=http://localhost:3001
-> ```
->
-> The proxy is configured in `frontend/vite.config.ts` and forwards any
-> `/api/*` requests to the API so that the UI can call relative paths.
->
-
 ```bash
 git clone https://github.com/Levy-Naibei/wix-hubspot-sync
 cd wix-hubspot-sync
 cp .env.example .env   # fill in values
+
+Note: backend code: checkout to `render-deploy` branch
 
 # local
 cd backend && npm install && npm run dev
@@ -82,22 +75,6 @@ docker-compose up --build
             `crm.objects.leads.read`, `crm.objects.leads.write`, `oauth`
 4. Webhooks → Subscribe to `contact.creation`, `contact.propertyChange`
 5. Copy Client ID, Client Secret, App ID to `.env`
-
-## UTM Attribution Schema
-
-Form submissions store these as HubSpot contact properties:
-
-|   Property          |         Source             |
-|---------------------|----------------------------|
-| `utm_source`        | `?utm_source=` query param |
-| `utm_medium`        | `?utm_medium=`             |
-| `utm_campaign`      | `?utm_campaign=`           |
-| `utm_term`          | `?utm_term=`               |
-| `utm_content`       | `?utm_content=`            |
-| `form_page_url`     | `window.location.href`     |
-| `form_referrer`     | `document.referrer`        |
-| `form_submitted_at` | ISO 8601 timestamp         |
-
 
 ## MongoDB Atlas Setup
 
