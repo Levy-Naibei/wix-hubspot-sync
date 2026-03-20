@@ -36,7 +36,8 @@ export function useConnection() {
   const connect = useCallback(async () => {
     try {
       const { authUrl } = await authApi.getAuthUrl();
-
+      // window.location.href = authUrl;
+      // Open OAuth popup
       const width = 900;
       const height = 800;
       const left = window.screenX + (window.outerWidth - width) / 2;

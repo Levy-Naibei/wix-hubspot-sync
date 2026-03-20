@@ -35,9 +35,11 @@ router.get('/hubspot', requireAuth, (req: Request, res: Response) => {
 router.get('/hubspot/callback', async (req: Request, res: Response) => {
   const { code, state, error } = req.query as Record<string, string>;
 
+  const parentOrigin = new URL(config.frontendUrl).origin;
+
   if (error) {
     logger.warn('HubSpot OAuth declined by user', { error });
-    return res.redirect(`${config.frontendUrl}?connected=false&error=${encodeURIComponent(error)}`);
+    return res.send(renderOAuthResultPage({ success: false }));
   }
 
   if (!code || !state) {
@@ -60,12 +62,55 @@ router.get('/hubspot/callback', async (req: Request, res: Response) => {
     }
 
     logger.info('HubSpot OAuth complete', { siteId, portalId });
-    res.redirect(`${config.frontendUrl}?connected=true`);
+    return res.send(renderOAuthResultPage({ success: true }));
   } catch (err) {
     logger.error('OAuth callback error', { err });
-    res.redirect(`${config.frontendUrl}?connected=false&error=oauth_failed`);
+    return res.send(renderOAuthResultPage({ success: false }));
   }
 });
+
+function renderOAuthResultPage(opts: { success: boolean }) {
+  const { success } = opts;
+  const message = success ? 'hubspot_oauth_success' : 'hubspot_oauth_error';
+  const title = success ? 'HubSpot Connected' : 'Connection Failed';
+  const text = success
+    ? 'HubSpot is now connected. You can close this window and return to Wix.'
+    : 'The connection failed. You can close this window and try again from Wix.';
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>${title}</title>
+      </head>
+      <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; text-align: center; padding: 2rem;">
+        <h1>${title}</h1>
+        <p>${text}</p>
+        <script>
+          (function() {
+            try {
+              if (window.opener && !window.opener.closed) {
+                // Use '*' as the target origin — the receiver (useConnection.tsx)
+                // validates event.origin against VITE_BACKEND_ORIGIN, so this is safe.
+                // Targeting a specific origin here would break when the frontend is
+                // embedded inside a Wix iframe because window.opener points to the
+                // Vercel iframe context, not the top-level Wix page.
+                window.opener.postMessage('${message}', '*');
+              }
+            } catch (e) {
+              console.error('postMessage error', e);
+            }
+            // Auto-close after a short delay
+            setTimeout(function () {
+              window.close();
+            }, 1000);
+          })();
+        </script>
+      </body>
+    </html>
+    `;
+}
 
 /**
  * GET /api/auth/status

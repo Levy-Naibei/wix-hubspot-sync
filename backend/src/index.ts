@@ -11,6 +11,7 @@ import webhookRoutes from "./routes/webhooks.js";
 import formRoutes from "./routes/forms.js";
 import syncRoutes from "./routes/sync.js";
 import homeRoute from "./routes/home.js";
+import { connectDb } from "./db/index.js";
 
 const app = express();
 
@@ -85,6 +86,13 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 
   res.status(500).json({ error: "Internal server error" });
+});
+
+// connect to DB before starting server
+await connectDb();
+
+app.listen(config.port, () => {
+  logger.info(`Server running on port ${config.port}`);
 });
 
 export default app;

@@ -67,7 +67,7 @@ router.post('/hubspot/:siteId', verifyHubSpotWebhook, async (req: Request, res: 
   // Acknowledge immediately
   res.status(200).json({ received: true });
 
-  const { siteId } = req.params;
+  const siteId = req.params.siteId as string;
   const events = req.body as HubSpotWebhookEvent[];
 
   if (!Array.isArray(events) || events.length === 0) {
